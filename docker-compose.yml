@@ -1,0 +1,14 @@
+name: gbmeteorite
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: ${COMPOSE_PROJECT_NAME:-gbmeteorite}-frontend:latest
+    container_name: ${COMPOSE_PROJECT_NAME:-gbmeteorite}-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-21825}:80"
+    environment:
+      - TZ=Asia/Shanghai
