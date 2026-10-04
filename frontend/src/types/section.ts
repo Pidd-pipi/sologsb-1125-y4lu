@@ -30,6 +30,8 @@ export interface ThinSection {
   /** 显微照片清单（文件名 / 描述） */
   micrographs: string[];
   quality: SectionQuality;
+  /** 跟随所属样本的版本戳：样本重量一变，旧版本上的衍生数据立即失效重算 */
+  sampleVersion: number;
   createdAt: number;
 }
 

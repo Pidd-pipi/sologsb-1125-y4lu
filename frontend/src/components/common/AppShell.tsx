@@ -21,6 +21,7 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import PublicIcon from '@mui/icons-material/Public';
 import { useSampleStore } from '../../stores/sampleStore';
 import { useToastStore } from '../../stores/uiStore';
+import { subscribeCatalog } from '../../utils/station';
 
 const DRAWER_WIDTH = 232;
 
@@ -45,18 +46,24 @@ const NAV = [
   { to: '/sections', label: '切片库' },
   { to: '/analysis', label: '分析检测' },
   { to: '/locations', label: '发现地分布' },
+  { to: '/sync', label: '样本包对账' },
 ];
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const loadAll = useSampleStore((s) => s.loadAll);
   const loaded = useSampleStore((s) => s.loaded);
   const sampleCount = useSampleStore((s) => s.samples.length);
+  const pendingCount = useSampleStore((s) => s.conflicts.filter((c) => c.status === 'pending').length);
+  const failedCount = useSampleStore((s) => s.batches.filter((b) => b.status === 'failed').length);
   const toast = useToastStore();
   const location = useLocation();
 
   useEffect(() => {
     if (!loaded) void loadAll();
   }, [loaded, loadAll]);
+
+  // 跨标签页：其他页完成导入 / 裁决 / 样本变更后，本页同步刷新
+  useEffect(() => subscribeCatalog(() => void loadAll()), [loadAll]);
 
   return (
     <ThemeProvider theme={theme}>
@@ -77,6 +84,19 @@ export default function AppShell({ children }: { children: ReactNode }) {
               label={`本地档案 ${sampleCount} 份样本`}
               sx={{ bgcolor: 'rgba(255,255,255,0.14)', color: '#f5efe4' }}
             />
+            {pendingCount > 0 ? (
+              <Chip
+                size="small"
+                color="warning"
+                label={`${pendingCount} 个冲突待裁决`}
+                component={RouterLink}
+                to="/sync"
+                clickable
+              />
+            ) : null}
+            {failedCount > 0 ? (
+              <Chip size="small" color="error" label={`${failedCount} 个失败包`} component={RouterLink} to="/sync" clickable />
+            ) : null}
             <Box sx={{ flex: 1 }} />
             <Typography variant="caption" sx={{ opacity: 0.8 }}>
               数据仅存于本机浏览器 · IndexedDB

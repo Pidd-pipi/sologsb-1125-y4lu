@@ -118,33 +118,38 @@ export default function New() {
     setErrors(list);
     if (list.length) return;
 
-    const sampleId = await addSample({
-      sampleNo: value.sampleNo.trim(),
-      totalWeight: Number(value.totalWeight),
-      category: value.category,
-      chemicalGroup: value.chemicalGroup,
-      weathering: value.weathering,
-      fallOrFind: value.fallOrFind,
-      storage: value.storage,
-      note: value.note.trim() || undefined,
-    });
-
-    if (value.withFind) {
-      await addFind({
-        sampleId,
-        placeName: value.placeName.trim(),
-        region: value.region.trim(),
-        longitude: Number(value.longitude),
-        latitude: Number(value.latitude),
-        coordinateSource: value.coordinateSource,
-        environment: value.environment,
-        finder: value.finder.trim() || '未署名',
+    try {
+      const sampleId = await addSample({
+        sampleNo: value.sampleNo.trim(),
+        totalWeight: Number(value.totalWeight),
+        category: value.category,
+        chemicalGroup: value.chemicalGroup,
+        weathering: value.weathering,
+        fallOrFind: value.fallOrFind,
+        storage: value.storage,
+        note: value.note.trim() || undefined,
       });
-    }
 
-    clear();
-    notify(`已登记样本 ${value.sampleNo.trim()}`);
-    navigate(`/samples/${sampleId}`);
+      if (value.withFind) {
+        await addFind({
+          sampleId,
+          placeName: value.placeName.trim(),
+          region: value.region.trim(),
+          longitude: Number(value.longitude),
+          latitude: Number(value.latitude),
+          coordinateSource: value.coordinateSource,
+          environment: value.environment,
+          finder: value.finder.trim() || '未署名',
+        });
+      }
+
+      clear();
+      notify(`已登记样本 ${value.sampleNo.trim()}`);
+      navigate(`/samples/${sampleId}`);
+    } catch (err) {
+      // 容量不足：拒绝入库、表单（草稿）原样保留，改柜位或重量后可再次提交
+      setErrors([err instanceof Error ? err.message : '入库失败，请检查柜架容量后重试']);
+    }
   };
 
   return (

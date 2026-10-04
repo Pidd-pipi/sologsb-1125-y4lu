@@ -21,6 +21,8 @@ export interface FindRecord {
   environment: FindEnvironment;
   /** 发现者 */
   finder: string;
+  /** 跟随所属样本版本戳（合并时随样本走，旧数据按初次入库补齐） */
+  sampleVersion?: number;
   createdAt: number;
 }
 

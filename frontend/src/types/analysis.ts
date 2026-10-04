@@ -25,6 +25,8 @@ export interface AnalysisRecord {
   kamaciteBandwidth: number;
   /** 检测日期 YYYY-MM-DD */
   testedAt: string;
+  /** 跟随所属样本的版本戳：样本重量一变，分类建议立即失效重算 */
+  sampleVersion: number;
   createdAt: number;
 }
 
@@ -75,7 +77,10 @@ export interface AnalysisEvaluation {
 }
 
 /** 生成一条空检测记录骨架 */
-export function emptyAnalysisDraft(sampleId: string): Omit<AnalysisRecord, 'id' | 'createdAt'> {
+export function emptyAnalysisDraft(
+  sampleId: string,
+  sampleVersion = 1,
+): Omit<AnalysisRecord, 'id' | 'createdAt'> {
   return {
     sampleId,
     target: 'sample',
@@ -85,5 +90,6 @@ export function emptyAnalysisDraft(sampleId: string): Omit<AnalysisRecord, 'id' 
     ni: 0,
     kamaciteBandwidth: 0,
     testedAt: new Date().toISOString().slice(0, 10),
+    sampleVersion,
   };
 }

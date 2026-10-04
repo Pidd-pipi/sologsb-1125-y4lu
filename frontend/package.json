@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview --port 21825"
+    "preview": "vite preview --port 21825",
+    "check:sync": "esbuild scripts/check-sync.ts --bundle --platform=node --format=esm --outfile=node_modules/.tmp/check-sync.mjs && node node_modules/.tmp/check-sync.mjs",
+    "check:store": "esbuild scripts/check-store.ts --bundle --platform=node --format=esm --outfile=node_modules/.tmp/check-store.mjs && node node_modules/.tmp/check-store.mjs",
+    "check:migration": "esbuild scripts/check-migration.ts --bundle --platform=node --format=esm --outfile=node_modules/.tmp/check-migration.mjs && node node_modules/.tmp/check-migration.mjs"
   },
   "dependencies": {
     "@emotion/react": "^11.13.5",
@@ -24,6 +27,7 @@
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
+    "fake-indexeddb": "^6.2.5",
     "typescript": "~5.7.3",
     "vite": "^6.1.0"
   }

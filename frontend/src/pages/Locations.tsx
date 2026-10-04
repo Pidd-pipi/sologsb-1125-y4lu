@@ -36,11 +36,14 @@ export default function Locations() {
 
   const points = useMemo(() => {
     const list = finds.filter((f) => (activeRegion ? f.region === activeRegion : true));
-    return list.map((f) => {
-      const sample = sampleMap.get(f.sampleId);
-      const pos = projectToGrid({ longitude: f.longitude, latitude: f.latitude }, SIZE);
-      return { find: f, sample, pos };
-    });
+    return list
+      .map((f) => {
+        const sample = sampleMap.get(f.sampleId);
+        const pos = projectToGrid({ longitude: f.longitude, latitude: f.latitude }, SIZE);
+        return { find: f, sample, pos };
+      })
+      // 待裁决样本暂不在发现地地图显示
+      .filter((p) => p.sample && !p.sample.pendingConflict);
   }, [finds, sampleMap, activeRegion]);
 
   const activeFind = points.find((p) => p.find.id === activePoint);

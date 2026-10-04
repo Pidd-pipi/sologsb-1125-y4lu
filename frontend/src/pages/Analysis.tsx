@@ -34,6 +34,7 @@ import {
   type AnalysisTarget,
 } from '../types/analysis';
 import { classifyByAnalysis, evaluateThresholds } from '../utils/classify';
+import { isRecordCurrent, staleAdviceNote } from '../utils/advice';
 import { formatDate } from '../utils/format';
 
 interface AnalysisDraft {
@@ -79,6 +80,11 @@ export default function Analysis() {
     [sections, value.sampleId],
   );
 
+  const selectedSample = useMemo(
+    () => samples.find((s) => s.id === value.sampleId),
+    [samples, value.sampleId],
+  );
+
   const hits = evaluateThresholds(value);
   const advice = classifyByAnalysis(value);
   const outOfRange = hits.filter((h) => !h.inRange);
@@ -103,6 +109,7 @@ export default function Analysis() {
       ni: Number(value.ni),
       kamaciteBandwidth: Number(value.kamaciteBandwidth),
       testedAt: value.testedAt,
+      sampleVersion: selectedSample?.version ?? 1,
     });
     clear();
     notify('检测记录已写入本地库');
@@ -136,11 +143,13 @@ export default function Analysis() {
                     value={value.sampleId}
                     onChange={(e) => patch({ sampleId: e.target.value, sectionId: '' })}
                   >
-                    {samples.map((s) => (
-                      <MenuItem key={s.id} value={s.id}>
-                        {s.sampleNo}
-                      </MenuItem>
-                    ))}
+                    {samples
+                      .filter((s) => !s.pendingConflict)
+                      .map((s) => (
+                        <MenuItem key={s.id} value={s.id}>
+                          {s.sampleNo}（v{s.version}）
+                        </MenuItem>
+                      ))}
                   </Select>
                 </FormControl>
                 <FormControl size="small" sx={{ minWidth: 150 }}>
@@ -350,21 +359,32 @@ export default function Analysis() {
             {analysis.slice(0, 12).map((a) => {
               const s = samples.find((x) => x.id === a.sampleId);
               const ev = classifyByAnalysis(a);
+              const stale = s ? !isRecordCurrent(a, s) : false;
               return (
                 <Box
                   key={a.id}
-                  sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 1.5 }}
+                  sx={{
+                    border: '1px solid',
+                    borderColor: stale ? 'warning.main' : 'divider',
+                    borderRadius: 2,
+                    p: 1.5,
+                    bgcolor: stale ? 'rgba(237,108,2,0.05)' : 'transparent',
+                  }}
                 >
                   <Stack direction="row" justifyContent="space-between" flexWrap="wrap" gap={1}>
                     <Typography variant="subtitle2">
                       {s ? s.sampleNo : '未知样本'} · {ANALYSIS_METHOD_LABELS[a.method]} ·{' '}
                       {formatDate(a.testedAt)}
                     </Typography>
-                    <ClassificationBadge category={ev.category} showGroup={false} />
+                    <Stack direction="row" spacing={0.75}>
+                      <Chip size="small" variant="outlined" label={`跟随 v${a.sampleVersion}`} />
+                      <ClassificationBadge category={ev.category} showGroup={false} />
+                      {stale ? <Chip size="small" color="warning" label="建议已失效" /> : null}
+                    </Stack>
                   </Stack>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="caption" color={stale ? 'warning.main' : 'text.secondary'}>
                     Fa {a.fa} mol% · Fs {a.fs} mol% · Ni {a.ni} wt% · 带宽 {a.kamaciteBandwidth} mm ——{' '}
-                    {ev.summary}
+                    {stale ? staleAdviceNote(a, s) : ev.summary}
                   </Typography>
                 </Box>
               );

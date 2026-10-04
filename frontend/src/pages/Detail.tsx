@@ -49,6 +49,8 @@ import {
 } from '../types/sample';
 import { FIND_ENVIRONMENT_LABELS, COORDINATE_SOURCE_LABELS } from '../types/find';
 import { classifyByAnalysis, evaluateThresholds } from '../utils/classify';
+import { isAnalysisStale, isRecordCurrent, staleAdviceNote } from '../utils/advice';
+import { CapacityError } from '../stores/sampleStore';
 import { formatDate, formatNumber, formatWeight } from '../utils/format';
 import { formatCoordinate } from '../utils/geo';
 
@@ -85,6 +87,9 @@ export default function Detail() {
     kamaciteBandwidth: 0.05,
     testedAt: new Date().toISOString().slice(0, 10),
   });
+  const [weightDraft, setWeightDraft] = useState<string>('');
+  const [weightError, setWeightError] = useState<string | null>(null);
+  const [pageError, setPageError] = useState<string | null>(null);
 
   if (!sample) {
     return (
@@ -113,8 +118,9 @@ export default function Detail() {
       minerals: sectionDraft.minerals,
       micrographs: sectionDraft.micrograph.trim() ? [sectionDraft.micrograph.trim()] : [],
       quality: sectionDraft.quality,
+      sampleVersion: sample.version,
     });
-    notify(`已为 ${sample.sampleNo} 新增切片 ${no}`);
+    notify(`已为 ${sample.sampleNo} 新增切片 ${no}（跟随 v${sample.version}）`);
     setSectionDraft((d) => ({ ...d, sectionNo: '', micrograph: '' }));
   };
 
@@ -128,8 +134,48 @@ export default function Detail() {
       ni: Number(analysisDraft.ni),
       kamaciteBandwidth: Number(analysisDraft.kamaciteBandwidth),
       testedAt: analysisDraft.testedAt,
+      sampleVersion: sample.version,
     });
-    notify(`已为 ${sample.sampleNo} 写入一条检测记录`);
+    notify(`已为 ${sample.sampleNo} 写入一条检测记录（跟随 v${sample.version}）`);
+  };
+
+  const submitWeight = async () => {
+    const next = Number(weightDraft);
+    if (!(next > 0)) {
+      setWeightError('总重量需大于 0 g');
+      return;
+    }
+    if (next === sample.totalWeight) {
+      setWeightError('重量未发生变化');
+      return;
+    }
+    setWeightError(null);
+    try {
+      // 重量一变：版本戳 +1，旧切片/分析的分类建议与柜架占用立即失效重算
+      await updateSample(sample.id, { totalWeight: next });
+      setWeightDraft('');
+      notify(`重量已更新，样本升至下一版本，旧分类建议与柜架占用已重算`);
+    } catch (err) {
+      setWeightError(
+        err instanceof CapacityError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : '更新失败',
+      );
+    }
+  };
+
+  const toggleStorage = async () => {
+    setPageError(null);
+    try {
+      await updateSample(sample.id, {
+        storage: sample.storage === 'loan-out' ? 'cabinet-a' : 'loan-out',
+      });
+      notify('已切换存放状态，柜架占用已即时重算');
+    } catch (err) {
+      setPageError(err instanceof Error ? err.message : '存放状态更新失败');
+    }
   };
 
   return (
@@ -140,6 +186,13 @@ export default function Detail() {
         </Button>
         <Typography variant="h4">样本详情</Typography>
       </Stack>
+
+      {sample.pendingConflict ? (
+        <Alert severity="warning">
+          该样本正处于离线包对账冲突待裁决状态，暂不在样本总览与发现地地图显示。请到
+          <RouterLink to="/sync">样本包对账</RouterLink>页确认保留本机还是采用离线记录；裁决期间柜架占用不计入该样本。
+        </Alert>
+      ) : null}
 
       <Grid container spacing={2.5}>
         <Grid item xs={12} md={4}>
@@ -154,19 +207,14 @@ export default function Detail() {
         <Grid item xs={12} md={8}>
           <Paper variant="outlined" sx={{ p: 2.5, height: '100%' }}>
             <Stack spacing={1.5}>
-              <Stack direction="row" justifyContent="space-between" alignItems="center">
+              <Stack direction="row" spacing={1} alignItems="center">
                 <Typography variant="h6">基本信息</Typography>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  onClick={() => {
-                    void updateSample(sample.id, { storage: sample.storage === 'loan-out' ? 'cabinet-a' : 'loan-out' });
-                    notify('已切换存放状态');
-                  }}
-                >
+                <Chip size="small" color="primary" variant="outlined" label={`版本戳 v${sample.version}`} />
+                <Button size="small" variant="outlined" onClick={() => void toggleStorage()}>
                   切换存放状态
                 </Button>
               </Stack>
+              {pageError ? <Alert severity="error">{pageError}</Alert> : null}
               <ClassificationBadge
                 category={sample.category}
                 group={sample.chemicalGroup}
@@ -217,6 +265,36 @@ export default function Detail() {
                   备注：{sample.note}
                 </Typography>
               ) : null}
+              <Divider />
+              <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
+                <Typography variant="subtitle2">重量修正</Typography>
+                <TextField
+                  id="detail-weight-input"
+                  size="small"
+                  type="number"
+                  label="新总重量 g"
+                  value={weightDraft}
+                  onChange={(e) => setWeightDraft(e.target.value)}
+                  sx={{ width: 150 }}
+                />
+                <Button
+                  size="small"
+                  variant="contained"
+                  onClick={() => void submitWeight()}
+                  disabled={weightDraft === ''}
+                >
+                  更新重量并重算
+                </Button>
+                {weightError ? (
+                  <Typography variant="caption" color="error.main">
+                    {weightError}
+                  </Typography>
+                ) : (
+                  <Typography variant="caption" color="text.secondary">
+                    重量变化后版本戳 +1：旧切片 / 分析的分类建议标记失效，柜架占用立即重算
+                  </Typography>
+                )}
+              </Stack>
               <Divider />
               <Typography variant="h6">发现地摘要</Typography>
               {find ? (
@@ -284,21 +362,36 @@ export default function Detail() {
               <Alert severity="info">暂无切片记录，可在下方就地新增。</Alert>
             ) : (
               <Stack spacing={1.25}>
-                {mySections.map((s) => (
+                {mySections.map((s) => {
+                  const sectionStale = !isRecordCurrent(s, sample);
+                  return (
                   <Box
                     key={s.id}
-                    sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 1.5 }}
+                    sx={{
+                      border: '1px solid',
+                      borderColor: sectionStale ? 'warning.main' : 'divider',
+                      borderRadius: 2,
+                      p: 1.5,
+                      bgcolor: sectionStale ? 'rgba(237,108,2,0.05)' : 'transparent',
+                    }}
                   >
                     <Stack direction="row" justifyContent="space-between" flexWrap="wrap" gap={1}>
                       <Typography variant="subtitle1" fontWeight={700}>
                         {s.sectionNo}
                       </Typography>
                       <Stack direction="row" spacing={0.75}>
+                        <Chip size="small" variant="outlined" label={`跟随 v${s.sampleVersion}`} />
                         <Chip size="small" label={`厚度 ${s.thickness} μm`} />
                         <Chip size="small" variant="outlined" label={PREPARATION_LABELS[s.preparation]} />
                         <Chip size="small" color="secondary" label={SECTION_QUALITY_LABELS[s.quality]} />
+                        {sectionStale ? <Chip size="small" color="warning" label="旧版本·待重算" /> : null}
                       </Stack>
                     </Stack>
+                    {sectionStale ? (
+                      <Alert severity="warning" sx={{ mt: 0.75, py: 0.5 }}>
+                        {staleAdviceNote(s, sample)}
+                      </Alert>
+                    ) : null}
                     <Typography variant="body2" color="text.secondary">
                       矿物占比：{MINERAL_KEYS.map((k) => `${MINERAL_LABELS[k]} ${s.minerals[k]}%`).join(' · ')}
                       （合计 {mineralTotal(s.minerals)}%）
@@ -307,7 +400,8 @@ export default function Detail() {
                       显微照片：{s.micrographs.length ? s.micrographs.join('、') : '未上传'}
                     </Typography>
                   </Box>
-                ))}
+                  );
+                })}
               </Stack>
             )}
 
@@ -422,24 +516,41 @@ export default function Detail() {
               <Stack spacing={1.25} sx={{ mb: 2 }}>
                 {myAnalysis.map((a) => {
                   const a2 = classifyByAnalysis(a);
+                  const stale = isAnalysisStale(a, sample);
                   return (
                     <Box
                       key={a.id}
-                      sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 1.5 }}
+                      sx={{
+                        border: '1px solid',
+                        borderColor: stale ? 'warning.main' : 'divider',
+                        borderRadius: 2,
+                        p: 1.5,
+                        bgcolor: stale ? 'rgba(237,108,2,0.05)' : 'transparent',
+                      }}
                     >
                       <Stack direction="row" justifyContent="space-between" flexWrap="wrap" gap={1}>
                         <Typography variant="subtitle2">
                           {ANALYSIS_METHOD_LABELS[a.method]} · {a.testedAt}
                         </Typography>
-                        <ClassificationBadge category={a2.category} showGroup={false} />
+                        <Stack direction="row" spacing={0.75}>
+                          <Chip size="small" variant="outlined" label={`跟随 v${a.sampleVersion}`} />
+                          <ClassificationBadge category={a2.category} showGroup={false} />
+                          {stale ? <Chip size="small" color="warning" label="建议已失效" /> : null}
+                        </Stack>
                       </Stack>
                       <Typography variant="body2" color="text.secondary">
                         Fa {formatNumber(a.fa, 2, ' mol%')} · Fs {formatNumber(a.fs, 2, ' mol%')} · Ni{' '}
                         {formatNumber(a.ni, 2, ' wt%')} · 带宽 {formatNumber(a.kamaciteBandwidth, 3, ' mm')}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {a2.summary}
-                      </Typography>
+                      {stale ? (
+                        <Typography variant="caption" color="warning.main">
+                          {staleAdviceNote(a, sample)}；请以当前版本重新检测并写入新记录
+                        </Typography>
+                      ) : (
+                        <Typography variant="caption" color="text.secondary">
+                          {a2.summary}
+                        </Typography>
+                      )}
                     </Box>
                   );
                 })}

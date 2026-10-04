@@ -20,6 +20,8 @@ export function useRegionStats() {
     const map = new Map<string, RegionStat>();
     for (const f of finds) {
       const sample = sampleMap.get(f.sampleId);
+      // 待裁决样本的发现地暂不上地图
+      if (!sample || sample.pendingConflict) continue;
       const region = f.region?.trim() || '未标注地区';
       const entry =
         map.get(region) ??

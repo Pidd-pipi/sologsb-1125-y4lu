@@ -56,6 +56,9 @@ export function SampleCard({
               <Typography variant="h6" fontWeight={700} letterSpacing="0.02em">
                 {sample.sampleNo}
               </Typography>
+              <Typography variant="caption" color="text.secondary">
+                版本戳 v{sample.version ?? 1}
+              </Typography>
             </Box>
             <Typography variant="h6" fontWeight={700} color="primary.main" whiteSpace="nowrap">
               {formatWeight(sample.totalWeight)}

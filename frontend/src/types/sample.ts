@@ -27,6 +27,15 @@ export interface MeteoriteSample {
   storage: StorageLocation;
   /** 备注（可选） */
   note?: string;
+  /**
+   * 版本戳：同一编号样本每轮实质变更单调递增；
+   * 切片与分析记录按此戳跟随所属样本版本，旧数据初次入库补齐为 1。
+   */
+  version: number;
+  /** 待裁决标记：离线包与本机同编号记录不一致时，两条都置 true；总览与发现地地图暂不显示 */
+  pendingConflict?: boolean;
+  /** 待裁决时所属冲突单 id（本机侧 / 离线侧两条都会挂） */
+  conflictId?: string;
   createdAt: number;
   /** v3 升级迁移新增字段 */
   updatedAt: number;
@@ -72,6 +81,17 @@ export const CHEMICAL_GROUPS: ChemicalGroup[] = ['H', 'L', 'LL', 'IAB', 'ungroup
 export const WEATHERING_GRADES: WeatheringGrade[] = ['W0', 'W1', 'W2', 'W3', 'W4'];
 export const FALL_OR_FINDS: FallOrFind[] = ['fall', 'find'];
 export const STORAGE_LOCATIONS: StorageLocation[] = ['cabinet-a', 'cabinet-b', 'desiccator', 'loan-out'];
+
+/**
+ * 柜架容量上限（单位 g，按存放位置合计样本总重量）。
+ * 外借中不占用柜架容量（null 表示不限）。
+ */
+export const STORAGE_CAPACITY_GRAMS: Record<StorageLocation, number | null> = {
+  'cabinet-a': 20000,
+  'cabinet-b': 15000,
+  desiccator: 5000,
+  'loan-out': null,
+};
 
 /** 分类建议结果 */
 export interface ClassificationAdvice {

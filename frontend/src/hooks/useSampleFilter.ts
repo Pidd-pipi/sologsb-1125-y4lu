@@ -18,7 +18,9 @@ export function useSampleFilter(override?: Partial<{ category: string; group: st
 
   const results = useMemo(() => {
     const kw = keyword.trim().toLowerCase();
+    // 待裁决样本暂不在样本总览显示，裁决完成后自动恢复
     const list = samples.filter((s) => {
+      if (s.pendingConflict) return false;
       if (categories.length && !categories.includes(s.category)) return false;
       if (groups.length && !groups.includes(s.chemicalGroup)) return false;
       if (minWeight !== null && s.totalWeight < minWeight) return false;
@@ -36,7 +38,8 @@ export function useSampleFilter(override?: Partial<{ category: string; group: st
 
   return {
     results,
-    total: samples.length,
+    /** 总览可见样本数（待裁决不计） */
+    total: samples.filter((s) => !s.pendingConflict).length,
     activeCount:
       categories.length +
       groups.length +
