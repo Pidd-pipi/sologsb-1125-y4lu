@@ -32,10 +32,17 @@ export default function Locations() {
   const [activeRegion, setActiveRegion] = useState<string | null>(null);
   const [activePoint, setActivePoint] = useState<string | null>(null);
 
-  const sampleMap = useMemo(() => new Map(samples.map((s) => [s.id, s])), [samples]);
+  const sampleMap = useMemo(
+    () => new Map(samples.filter((s) => s.status !== 'pending').map((s) => [s.id, s])),
+    [samples],
+  );
+  const activeFindCount = finds.filter((f) => f.status !== 'pending').length;
 
   const points = useMemo(() => {
-    const list = finds.filter((f) => (activeRegion ? f.region === activeRegion : true));
+    // 待裁决副本的发现地不打点
+    const list = finds
+      .filter((f) => f.status !== 'pending')
+      .filter((f) => (activeRegion ? f.region === activeRegion : true));
     return list.map((f) => {
       const sample = sampleMap.get(f.sampleId);
       const pos = projectToGrid({ longitude: f.longitude, latitude: f.latitude }, SIZE);
@@ -60,7 +67,7 @@ export default function Locations() {
         </Typography>
       </Box>
 
-      {finds.length === 0 ? (
+      {activeFindCount === 0 ? (
         <EmptyState
           title="还没有登记任何发现地坐标"
           description="在样本登记页补录发现地名、经纬度与坐标来源后，这里会自动打点。"

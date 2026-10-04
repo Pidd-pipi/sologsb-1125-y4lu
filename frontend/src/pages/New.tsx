@@ -17,8 +17,9 @@ import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import { useNavigate } from 'react-router-dom';
 import FieldGroup from '../components/common/FieldGroup';
 import CoordinatePicker from '../components/common/CoordinatePicker';
+import OccupancyPanel from '../components/common/OccupancyPanel';
 import { useLocalDraft } from '../hooks/useLocalDraft';
-import { useSampleStore } from '../stores/sampleStore';
+import { useSampleStore, CapacityExceededError } from '../stores/sampleStore';
 import { useToastStore } from '../stores/uiStore';
 import {
   CHEMICAL_GROUP_LABELS,
@@ -74,6 +75,7 @@ export default function New() {
   const nextSeq = useSampleStore((s) => s.nextSampleSeq);
   const addSample = useSampleStore((s) => s.addSample);
   const addFind = useSampleStore((s) => s.addFind);
+  const samples = useSampleStore((s) => s.samples);
   const notify = useToastStore((s) => s.notify);
 
   const initial = useMemo<FormDraft>(
@@ -118,16 +120,27 @@ export default function New() {
     setErrors(list);
     if (list.length) return;
 
-    const sampleId = await addSample({
-      sampleNo: value.sampleNo.trim(),
-      totalWeight: Number(value.totalWeight),
-      category: value.category,
-      chemicalGroup: value.chemicalGroup,
-      weathering: value.weathering,
-      fallOrFind: value.fallOrFind,
-      storage: value.storage,
-      note: value.note.trim() || undefined,
-    });
+    let sampleId: string;
+    try {
+      sampleId = await addSample({
+        sampleNo: value.sampleNo.trim(),
+        totalWeight: Number(value.totalWeight),
+        category: value.category,
+        chemicalGroup: value.chemicalGroup,
+        weathering: value.weathering,
+        fallOrFind: value.fallOrFind,
+        storage: value.storage,
+        note: value.note.trim() || undefined,
+      });
+    } catch (err) {
+      // 容量不足拒绝入库：表单草稿（含原柜位选择）保留，等待修正
+      if (err instanceof CapacityExceededError) {
+        setErrors([err.message]);
+        notify('柜架超重，未入库；已保留表单与原柜位选择', 'error');
+        return;
+      }
+      throw err;
+    }
 
     if (value.withFind) {
       await addFind({
@@ -384,6 +397,10 @@ export default function New() {
                 )}
               </Stack>
             ) : null}
+          </FieldGroup>
+
+          <FieldGroup title="柜架占用（实时）" hint="容量不足时保存会被拒绝，表单草稿与原柜位保留">
+            <OccupancyPanel samples={samples} highlightStorage={value.storage} />
           </FieldGroup>
         </Grid>
       </Grid>

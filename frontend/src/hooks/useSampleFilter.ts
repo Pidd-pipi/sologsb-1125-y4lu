@@ -16,9 +16,17 @@ export function useSampleFilter(override?: Partial<{ category: string; group: st
   const keyword = useUiStore((s) => s.keyword);
   const sort = useUiStore((s) => s.sort);
 
+  // 在档样本总数（pending 待裁决副本不计入总览）
+  const activeTotal = useMemo(
+    () => samples.filter((s) => s.status !== 'pending').length,
+    [samples],
+  );
+
   const results = useMemo(() => {
     const kw = keyword.trim().toLowerCase();
     const list = samples.filter((s) => {
+      // 冲突待裁决的 pending 副本不进样本总览
+      if (s.status === 'pending') return false;
       if (categories.length && !categories.includes(s.category)) return false;
       if (groups.length && !groups.includes(s.chemicalGroup)) return false;
       if (minWeight !== null && s.totalWeight < minWeight) return false;
@@ -36,7 +44,7 @@ export function useSampleFilter(override?: Partial<{ category: string; group: st
 
   return {
     results,
-    total: samples.length,
+    total: activeTotal,
     activeCount:
       categories.length +
       groups.length +

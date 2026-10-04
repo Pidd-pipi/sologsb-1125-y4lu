@@ -6,6 +6,7 @@ import {
   FormControl,
   Grid,
   InputLabel,
+  Link,
   MenuItem,
   Select,
   Stack,
@@ -34,10 +35,17 @@ export default function Overview() {
   const finds = useSampleStore((s) => s.finds);
   const sections = useSampleStore((s) => s.sections);
   const analysis = useSampleStore((s) => s.analysis);
+  const openConflicts = useSampleStore((s) => s.conflicts.filter((c) => c.status === 'open'));
 
   const ui = useUiStore();
 
-  const findBySample = useMemo(() => new Map(finds.map((f) => [f.sampleId, f])), [finds]);
+  // 仅在档（active）样本参与总览统计与关联；待裁决副本暂不显示
+  const activeSamples = useMemo(() => samples.filter((s) => s.status !== 'pending'), [samples]);
+  const activeFinds = useMemo(
+    () => finds.filter((f) => f.status !== 'pending' && activeSamples.some((s) => s.id === f.sampleId)),
+    [finds, activeSamples],
+  );
+  const findBySample = useMemo(() => new Map(activeFinds.map((f) => [f.sampleId, f])), [activeFinds]);
   const sectionCount = useMemo(() => {
     const m = new Map<string, number>();
     sections.forEach((s) => m.set(s.sampleId, (m.get(s.sampleId) ?? 0) + 1));
@@ -60,10 +68,29 @@ export default function Overview() {
             共 {total} 份样本，当前筛选命中 {results.length} 份，合计 {formatWeight(totalWeight)}
           </Typography>
         </Box>
-        <Button component={RouterLink} to="/samples/new" variant="contained" startIcon={<AddIcon />}>
-          登记新样本
-        </Button>
+        <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
+          <Button component={RouterLink} to="/samples/new" variant="contained" startIcon={<AddIcon />}>
+            登记新样本
+          </Button>
+          <Button component={RouterLink} to="/sync" variant="outlined">
+            样本包对账
+          </Button>
+        </Stack>
       </Stack>
+
+      {openConflicts.length > 0 ? (
+        <Box sx={{ p: 1.5, pl: 2, borderRadius: 2, bgcolor: 'rgba(237,108,2,0.08)', border: '1px solid', borderColor: 'warning.light' }}>
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+            <Chip size="small" color="warning" label={`${openConflicts.length} 条冲突待裁决`} />
+            <Typography variant="body2">
+              冲突中的两条样本（含切片、分析与发现地）暂不在总览和发现地地图显示。
+            </Typography>
+            <Link component={RouterLink} to="/sync" variant="body2">
+              前往对账台裁决 →
+            </Link>
+          </Stack>
+        </Box>
+      ) : null}
 
       <Box
         sx={{

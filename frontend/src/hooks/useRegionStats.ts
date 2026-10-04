@@ -16,9 +16,11 @@ export function useRegionStats() {
   const samples = useSampleStore((s) => s.samples);
 
   return useMemo(() => {
-    const sampleMap = new Map(samples.map((s) => [s.id, s]));
+    const activeSamples = samples.filter((s) => s.status !== 'pending');
+    const sampleMap = new Map(activeSamples.map((s) => [s.id, s]));
     const map = new Map<string, RegionStat>();
-    for (const f of finds) {
+    // 待裁决副本及其发现地不在地图打点
+    for (const f of finds.filter((f) => f.status !== 'pending')) {
       const sample = sampleMap.get(f.sampleId);
       const region = f.region?.trim() || '未标注地区';
       const entry =

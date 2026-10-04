@@ -4,6 +4,9 @@ export type CoordinateSource = 'gps' | 'literature';
 /** 发现环境 */
 export type FindEnvironment = 'desert' | 'antarctica' | 'witnessed';
 
+/** 在档状态：pending 为冲突待裁决副本 */
+export type FindStatus = 'active' | 'pending';
+
 /** 发现与坠落记录（FindRecord） */
 export interface FindRecord {
   id: string;
@@ -22,6 +25,12 @@ export interface FindRecord {
   /** 发现者 */
   finder: string;
   createdAt: number;
+  /** v4：跟随所属样本版本戳 */
+  sampleVersion?: number;
+  /** v4：在档状态 */
+  status?: FindStatus;
+  /** pending 副本所属冲突单 id */
+  conflictId?: string;
 }
 
 export const COORDINATE_SOURCE_LABELS: Record<CoordinateSource, string> = {

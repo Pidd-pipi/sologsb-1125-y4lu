@@ -26,6 +26,8 @@ export interface AnalysisRecord {
   /** 检测日期 YYYY-MM-DD */
   testedAt: string;
   createdAt: number;
+  /** v4：跟随所属样本版本戳 */
+  sampleVersion?: number;
 }
 
 export const ANALYSIS_METHOD_LABELS: Record<AnalysisMethod, string> = {

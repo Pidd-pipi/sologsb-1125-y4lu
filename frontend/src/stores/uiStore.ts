@@ -40,7 +40,7 @@ export const useUiStore = create<SampleFilterState>((set) => ({
 /** 侧栏提示条（轻量全局反馈） */
 export interface ToastState {
   message: string;
-  severity: 'success' | 'info' | 'warning';
+  severity: 'success' | 'info' | 'warning' | 'error';
   open: boolean;
   notify: (message: string, severity?: ToastState['severity']) => void;
   close: () => void;

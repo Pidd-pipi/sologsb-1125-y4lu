@@ -3,6 +3,7 @@ import type { MeteoriteSample } from '../types/sample';
 import type { FindRecord } from '../types/find';
 import type { ThinSection } from '../types/section';
 import type { AnalysisRecord } from '../types/analysis';
+import type { ConflictRecord, ImportFailure } from '../types/sync';
 
 /** 库名固定为 gbmeteorite-db */
 export const DB_NAME = 'gbmeteorite-db';
@@ -12,12 +13,17 @@ export const DB_NAME = 'gbmeteorite-db';
  *  - v1：建 samples / finds / sections 三张表
  *  - v2：新增 analysis 表，并为 analysis 加 sampleId 索引
  *  - v3：为 samples 补 updatedAt 字段，并按 id 回填旧记录
+ *  - v4：离线样本包对账——samples 补 version/status，新增 conflicts / importFailures 表；
+ *        旧数据没有版本戳的按初次入库补齐（version=1、status=active，
+ *        切片 / 发现 / 分析记录按所属样本补齐 sampleVersion）
  */
 export class MeteoriteDB extends Dexie {
   samples!: Table<MeteoriteSample, string>;
   finds!: Table<FindRecord, string>;
   sections!: Table<ThinSection, string>;
   analysis!: Table<AnalysisRecord, string>;
+  conflicts!: Table<ConflictRecord, string>;
+  importFailures!: Table<ImportFailure, string>;
 
   constructor() {
     super(DB_NAME);
@@ -65,6 +71,47 @@ export class MeteoriteDB extends Dexie {
             }
           });
       });
+
+    this.version(4)
+      .stores({
+        samples:
+          'id, sampleNo, category, chemicalGroup, totalWeight, createdAt, updatedAt, version, status, conflictId',
+        finds: 'id, sampleId, region, createdAt, conflictId, status',
+        sections: 'id, sectionNo, sampleId, thickness, createdAt',
+        analysis: 'id, sampleId, sectionId, method, testedAt, createdAt',
+        conflicts: 'id, sampleNo, status, createdAt',
+        importFailures: 'id, reason, conflictId, createdAt',
+      })
+      .upgrade(async (tx) => {
+        // v4：旧数据没有版本戳的按初次入库补齐
+        await tx
+          .table<MeteoriteSample, string>('samples')
+          .toCollection()
+          .modify((sample) => {
+            if (typeof sample.version !== 'number') sample.version = 1;
+            if (sample.status !== 'pending') sample.status = 'active';
+          });
+
+        const versionBySample = new Map<string, number>();
+        await tx
+          .table<MeteoriteSample, string>('samples')
+          .each((s) => versionBySample.set(s.id, s.version ?? 1));
+
+        const stamp = <T extends { sampleId: string; sampleVersion?: number }>(rec: T) => {
+          if (typeof rec.sampleVersion !== 'number') {
+            rec.sampleVersion = versionBySample.get(rec.sampleId) ?? 1;
+          }
+        };
+        await tx
+          .table<FindRecord, string>('finds')
+          .toCollection()
+          .modify((rec) => {
+            if (rec.status !== 'pending') rec.status = 'active';
+            stamp(rec);
+          });
+        await tx.table<ThinSection, string>('sections').toCollection().modify(stamp);
+        await tx.table<AnalysisRecord, string>('analysis').toCollection().modify(stamp);
+      });
   }
 }
 
@@ -95,6 +142,8 @@ export async function seedIfEmpty(): Promise<void> {
         note: '撒哈拉回收，熔壳完整',
         createdAt: now - 86400000 * 40,
         updatedAt: now - 86400000 * 40,
+        version: 1,
+        status: 'active',
       },
       {
         id: 'sample_seed_2',
@@ -108,6 +157,8 @@ export async function seedIfEmpty(): Promise<void> {
         note: '八面体结构清晰',
         createdAt: now - 86400000 * 30,
         updatedAt: now - 86400000 * 30,
+        version: 1,
+        status: 'active',
       },
       {
         id: 'sample_seed_3',
@@ -121,6 +172,8 @@ export async function seedIfEmpty(): Promise<void> {
         note: '目击坠落，无熔壳',
         createdAt: now - 86400000 * 18,
         updatedAt: now - 86400000 * 18,
+        version: 1,
+        status: 'active',
       },
     ]);
     await db.finds.bulkAdd([
@@ -135,6 +188,8 @@ export async function seedIfEmpty(): Promise<void> {
         environment: 'desert',
         finder: '野外队 A 组',
         createdAt: now - 86400000 * 40,
+        sampleVersion: 1,
+        status: 'active',
       },
       {
         id: 'find_seed_2',
@@ -147,6 +202,8 @@ export async function seedIfEmpty(): Promise<void> {
         environment: 'desert',
         finder: '标本室交换',
         createdAt: now - 86400000 * 30,
+        sampleVersion: 1,
+        status: 'active',
       },
     ]);
     await db.sections.bulkAdd([
@@ -160,6 +217,7 @@ export async function seedIfEmpty(): Promise<void> {
         micrographs: ['met001_ppl.jpg', 'met001_xpl.jpg'],
         quality: 'good',
         createdAt: now - 86400000 * 35,
+        sampleVersion: 1,
       },
       {
         id: 'section_seed_2',
@@ -171,6 +229,7 @@ export async function seedIfEmpty(): Promise<void> {
         micrographs: ['met002_reflect.jpg'],
         quality: 'fair',
         createdAt: now - 86400000 * 25,
+        sampleVersion: 1,
       },
     ]);
     await db.analysis.bulkAdd([
@@ -185,6 +244,7 @@ export async function seedIfEmpty(): Promise<void> {
         kamaciteBandwidth: 0.02,
         testedAt: '2024-06-12',
         createdAt: now - 86400000 * 20,
+        sampleVersion: 1,
       },
       {
         id: 'analysis_seed_2',
@@ -197,6 +257,7 @@ export async function seedIfEmpty(): Promise<void> {
         kamaciteBandwidth: 0.62,
         testedAt: '2024-07-03',
         createdAt: now - 86400000 * 12,
+        sampleVersion: 1,
       },
     ]);
   });

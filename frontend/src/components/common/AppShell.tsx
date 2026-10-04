@@ -19,8 +19,10 @@ import {
 } from '@mui/material';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import PublicIcon from '@mui/icons-material/Public';
+import SyncIcon from '@mui/icons-material/Sync';
 import { useSampleStore } from '../../stores/sampleStore';
 import { useToastStore } from '../../stores/uiStore';
+import { dataChangeBus } from '../../utils/syncBus';
 
 const DRAWER_WIDTH = 232;
 
@@ -45,18 +47,33 @@ const NAV = [
   { to: '/sections', label: '切片库' },
   { to: '/analysis', label: '分析检测' },
   { to: '/locations', label: '发现地分布' },
+  { to: '/sync', label: '样本包对账' },
 ];
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const loadAll = useSampleStore((s) => s.loadAll);
   const loaded = useSampleStore((s) => s.loaded);
   const sampleCount = useSampleStore((s) => s.samples.length);
+  const conflicts = useSampleStore((s) => s.conflicts);
+  const failures = useSampleStore((s) => s.failures);
+  const refreshSyncState = useSampleStore((s) => s.refreshSyncState);
   const toast = useToastStore();
   const location = useLocation();
+
+  const openConflictCount = conflicts.filter((c) => c.status === 'open').length;
 
   useEffect(() => {
     if (!loaded) void loadAll();
   }, [loaded, loadAll]);
+
+  // 其他标签页并库 / 裁决后，本页同步刷新数据
+  useEffect(() => {
+    if (!loaded) return;
+    const unsub = dataChangeBus.subscribe(() => {
+      void refreshSyncState();
+    });
+    return unsub;
+  }, [loaded, refreshSyncState]);
 
   return (
     <ThemeProvider theme={theme}>
@@ -77,6 +94,27 @@ export default function AppShell({ children }: { children: ReactNode }) {
               label={`本地档案 ${sampleCount} 份样本`}
               sx={{ bgcolor: 'rgba(255,255,255,0.14)', color: '#f5efe4' }}
             />
+            {openConflictCount > 0 ? (
+              <Chip
+                size="small"
+                component={RouterLink}
+                to="/sync"
+                clickable
+                color="warning"
+                icon={<SyncIcon />}
+                label={`${openConflictCount} 条冲突待裁决`}
+              />
+            ) : null}
+            {failures.length > 0 ? (
+              <Chip
+                size="small"
+                component={RouterLink}
+                to="/sync"
+                clickable
+                color="error"
+                label={`${failures.length} 个失败包`}
+              />
+            ) : null}
             <Box sx={{ flex: 1 }} />
             <Typography variant="caption" sx={{ opacity: 0.8 }}>
               数据仅存于本机浏览器 · IndexedDB

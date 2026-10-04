@@ -79,6 +79,12 @@ export default function Analysis() {
     [sections, value.sampleId],
   );
 
+  // 待裁决副本的检测记录不列入
+  const visibleAnalysis = useMemo(() => {
+    const activeIds = new Set(samples.filter((s) => s.status !== 'pending').map((s) => s.id));
+    return analysis.filter((a) => activeIds.has(a.sampleId));
+  }, [analysis, samples]);
+
   const hits = evaluateThresholds(value);
   const advice = classifyByAnalysis(value);
   const outOfRange = hits.filter((h) => !h.inRange);
@@ -136,11 +142,13 @@ export default function Analysis() {
                     value={value.sampleId}
                     onChange={(e) => patch({ sampleId: e.target.value, sectionId: '' })}
                   >
-                    {samples.map((s) => (
-                      <MenuItem key={s.id} value={s.id}>
-                        {s.sampleNo}
-                      </MenuItem>
-                    ))}
+                    {samples
+                      .filter((s) => s.status !== 'pending')
+                      .map((s) => (
+                        <MenuItem key={s.id} value={s.id}>
+                          {s.sampleNo}
+                        </MenuItem>
+                      ))}
                   </Select>
                 </FormControl>
                 <FormControl size="small" sx={{ minWidth: 150 }}>
@@ -336,9 +344,9 @@ export default function Analysis() {
 
       <Paper variant="outlined" sx={{ p: 2.5 }}>
         <Typography variant="h6" sx={{ mb: 1.5 }}>
-          已录入检测记录（{analysis.length}）
+          已录入检测记录（{visibleAnalysis.length}）
         </Typography>
-        {analysis.length === 0 ? (
+        {visibleAnalysis.length === 0 ? (
           <EmptyState
             title="还没有检测记录"
             description="在上方选择样本、填写 Fa / Fs / Ni 与铁纹石带宽后保存。"
@@ -347,7 +355,7 @@ export default function Analysis() {
           />
         ) : (
           <Stack spacing={1}>
-            {analysis.slice(0, 12).map((a) => {
+            {visibleAnalysis.slice(0, 12).map((a) => {
               const s = samples.find((x) => x.id === a.sampleId);
               const ev = classifyByAnalysis(a);
               return (

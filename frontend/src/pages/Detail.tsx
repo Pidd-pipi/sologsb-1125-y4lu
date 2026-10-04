@@ -22,7 +22,7 @@ import SampleCard from '../components/common/SampleCard';
 import FieldGroup from '../components/common/FieldGroup';
 import ClassificationBadge from '../components/common/Badge';
 import EmptyState from '../components/common/EmptyState';
-import { useSampleStore } from '../stores/sampleStore';
+import { useSampleStore, CapacityExceededError } from '../stores/sampleStore';
 import { useToastStore } from '../stores/uiStore';
 import {
   ANALYSIS_METHODS,
@@ -59,6 +59,7 @@ export default function Detail() {
   const finds = useSampleStore((s) => s.finds);
   const sections = useSampleStore((s) => s.sections);
   const analysis = useSampleStore((s) => s.analysis);
+  const conflicts = useSampleStore((s) => s.conflicts);
   const addSection = useSampleStore((s) => s.addSection);
   const addAnalysis = useSampleStore((s) => s.addAnalysis);
   const updateSample = useSampleStore((s) => s.updateSample);
@@ -68,6 +69,11 @@ export default function Detail() {
   const find = useMemo(() => finds.find((f) => f.sampleId === id), [finds, id]);
   const mySections = useMemo(() => sections.filter((s) => s.sampleId === id), [sections, id]);
   const myAnalysis = useMemo(() => analysis.filter((a) => a.sampleId === id), [analysis, id]);
+  const conflict = useMemo(
+    () => (sample?.conflictId ? conflicts.find((c) => c.id === sample.conflictId) : undefined),
+    [sample, conflicts],
+  );
+  const isPending = sample?.status === 'pending';
 
   const [sectionDraft, setSectionDraft] = useState({
     sectionNo: '',
@@ -114,8 +120,20 @@ export default function Detail() {
       micrographs: sectionDraft.micrograph.trim() ? [sectionDraft.micrograph.trim()] : [],
       quality: sectionDraft.quality,
     });
-    notify(`已为 ${sample.sampleNo} 新增切片 ${no}`);
+    notify(`已为 ${sample.sampleNo} 新增切片 ${no}（跟随样本 v${sample.version}）`);
     setSectionDraft((d) => ({ ...d, sectionNo: '', micrograph: '' }));
+  };
+
+  const toggleStorage = async () => {
+    try {
+      await updateSample(sample.id, {
+        storage: sample.storage === 'loan-out' ? 'cabinet-a' : 'loan-out',
+      });
+      notify('已切换存放状态');
+    } catch (err) {
+      if (err instanceof CapacityExceededError) notify(err.message, 'error');
+      else throw err;
+    }
   };
 
   const submitAnalysis = async () => {
@@ -141,6 +159,27 @@ export default function Detail() {
         <Typography variant="h4">样本详情</Typography>
       </Stack>
 
+      {isPending ? (
+        <Alert
+          severity="warning"
+          action={
+            conflict ? (
+              <Button
+                color="inherit"
+                size="small"
+                component={RouterLink}
+                to={`/sync/conflicts/${conflict.id}`}
+              >
+                去裁决
+              </Button>
+            ) : undefined
+          }
+        >
+          该样本处于冲突待裁决（{conflict?.sampleNo ?? sample.sampleNo}），暂不在样本总览与发现地地图显示，
+          也不能新增切片或分析记录；裁决落档后恢复。
+        </Alert>
+      ) : null}
+
       <Grid container spacing={2.5}>
         <Grid item xs={12} md={4}>
           <SampleCard
@@ -156,22 +195,34 @@ export default function Detail() {
             <Stack spacing={1.5}>
               <Stack direction="row" justifyContent="space-between" alignItems="center">
                 <Typography variant="h6">基本信息</Typography>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  onClick={() => {
-                    void updateSample(sample.id, { storage: sample.storage === 'loan-out' ? 'cabinet-a' : 'loan-out' });
-                    notify('已切换存放状态');
-                  }}
-                >
-                  切换存放状态
-                </Button>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Chip size="small" variant="outlined" label={`版本戳 v${sample.version}`} />
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => void toggleStorage()}
+                    disabled={isPending}
+                  >
+                    切换存放状态
+                  </Button>
+                </Stack>
               </Stack>
               <ClassificationBadge
                 category={sample.category}
                 group={sample.chemicalGroup}
                 size="medium"
               />
+              {sample.adviceSnapshot ? (
+                <Alert
+                  severity={
+                    sample.adviceSnapshot.weightBasis === sample.totalWeight ? 'info' : 'warning'
+                  }
+                  icon={false}
+                >
+                  分类建议（重量变化即重算）：{sample.adviceSnapshot.summary}
+                  {sample.adviceSnapshot.basis === 'analysis' ? ' · 依据最新检测记录' : ' · 暂无检测，按登记分类'}
+                </Alert>
+              ) : null}
               <Grid container spacing={1.5}>
                 <Grid item xs={6} sm={4}>
                   <Typography variant="caption" color="text.secondary">
@@ -403,9 +454,10 @@ export default function Detail() {
                 startIcon={<AddIcon />}
                 onClick={submitSection}
                 id="add-section"
+                disabled={isPending}
                 sx={{ alignSelf: 'flex-start' }}
               >
-                新增切片
+                {isPending ? '待裁决中，暂不可新增切片' : '新增切片'}
               </Button>
             </Stack>
           </Paper>
@@ -534,9 +586,10 @@ export default function Detail() {
                 startIcon={<AddIcon />}
                 onClick={submitAnalysis}
                 id="add-analysis"
+                disabled={isPending}
                 sx={{ alignSelf: 'flex-start' }}
               >
-                写入检测记录
+                {isPending ? '待裁决中，暂不可写入检测' : '写入检测记录'}
               </Button>
               <Typography variant="caption" color="text.secondary">
                 阈值参考：

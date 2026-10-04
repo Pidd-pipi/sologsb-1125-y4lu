@@ -13,6 +13,31 @@ export type FallOrFind = 'fall' | 'find';
 /** 存放位置 */
 export type StorageLocation = 'cabinet-a' | 'cabinet-b' | 'desiccator' | 'loan-out';
 
+/** 在档状态：active 正常；pending 为冲突待裁决副本（不进总览与地图） */
+export type SampleStatus = 'active' | 'pending';
+
+/** 分类建议快照：重量变化即失效，立即重算 */
+export interface AdviceSnapshot {
+  /** 依据：最新检测记录 / 按登记分类兜底 / 暂无数据 */
+  basis: 'analysis' | 'default' | 'none';
+  category: SampleCategory;
+  confidence: 'high' | 'medium' | 'low';
+  summary: string;
+  hits: string[];
+  /** 作为依据的检测记录 id（basis=analysis 时） */
+  analysisId?: string;
+  /** 快照所依据的样本重量（g），与当前重量不一致即视为失效 */
+  weightBasis: number;
+  computedAt: number;
+}
+
+/** 柜架占用快照：记录重量落位时的柜位与重量 */
+export interface OccupancySnapshot {
+  storage: StorageLocation;
+  weight: number;
+  computedAt: number;
+}
+
 /** 陨石样本（MeteoriteSample） */
 export interface MeteoriteSample {
   id: string;
@@ -30,6 +55,16 @@ export interface MeteoriteSample {
   createdAt: number;
   /** v3 升级迁移新增字段 */
   updatedAt: number;
+  /** 版本戳：每次内容修订 / 裁决自增；v4 迁移旧数据按初次入库补 1 */
+  version: number;
+  /** v4：在档状态 */
+  status: SampleStatus;
+  /** pending 副本所属冲突单 id */
+  conflictId?: string;
+  /** 派生数据：分类建议快照（重量一变即失效重算） */
+  adviceSnapshot?: AdviceSnapshot | null;
+  /** 派生数据：柜架占用快照 */
+  occupancySnapshot?: OccupancySnapshot | null;
 }
 
 export const CATEGORY_LABELS: Record<SampleCategory, string> = {
@@ -65,6 +100,17 @@ export const STORAGE_LABELS: Record<StorageLocation, string> = {
   'cabinet-b': 'B 柜 · 常温架',
   desiccator: '真空干燥器',
   'loan-out': '外借中',
+};
+
+/**
+ * 柜架容量上限（g）。undefined 表示不计容量（外借中不占柜）。
+ * 入库前校验，不足时拒绝入库并保留原柜位。
+ */
+export const STORAGE_CAPACITY: Partial<Record<StorageLocation, number>> = {
+  'cabinet-a': 10000,
+  'cabinet-b': 12000,
+  desiccator: 2000,
+  'loan-out': undefined,
 };
 
 export const SAMPLE_CATEGORIES: SampleCategory[] = ['chondrite', 'iron', 'stony-iron', 'achondrite'];
